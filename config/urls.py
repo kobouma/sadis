@@ -1,4 +1,5 @@
 # config/urls.py
+from config.admin_site import *  
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
