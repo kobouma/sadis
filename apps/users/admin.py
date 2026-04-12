@@ -2,13 +2,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
+from unfold.admin import ModelAdmin, StackedInline
 from .models import User, Profile
 
 
-class ProfileInline(admin.StackedInline):
-    model  = Profile
-    extra  = 0
-    fields = ["avatar_preview", "avatar", "city", "address", "bio"]
+class ProfileInline(StackedInline):
+    model           = Profile
+    extra           = 0
+    fields          = ["avatar_preview", "avatar", "city", "address", "bio"]
     readonly_fields = ["avatar_preview"]
 
     def avatar_preview(self, obj):
@@ -23,10 +24,10 @@ class ProfileInline(admin.StackedInline):
 
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin):
+class UserAdmin(ModelAdmin, BaseUserAdmin):
     inlines         = [ProfileInline]
-    list_display    = ["phone", "full_name", "role_badge", "phone_verified",
-                       "is_active", "date_joined"]
+    list_display    = ["phone", "full_name", "role_badge",
+                       "phone_verified", "is_active", "date_joined"]
     list_filter     = ["role", "phone_verified", "is_active"]
     search_fields   = ["phone", "full_name"]
     ordering        = ["-date_joined"]
@@ -76,9 +77,9 @@ class UserAdmin(BaseUserAdmin):
 
 
 @admin.register(Profile)
-class ProfileAdmin(admin.ModelAdmin):
-    list_display  = ["user", "city", "avatar_preview"]
-    search_fields = ["user__phone", "user__full_name"]
+class ProfileAdmin(ModelAdmin):
+    list_display    = ["user", "city", "avatar_preview"]
+    search_fields   = ["user__phone", "user__full_name"]
     readonly_fields = ["avatar_preview"]
 
     def avatar_preview(self, obj):

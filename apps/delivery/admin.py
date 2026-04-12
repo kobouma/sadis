@@ -1,20 +1,20 @@
 # apps/delivery/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
+from unfold.admin import ModelAdmin, TabularInline
 from apps.delivery.models import DeliveryTicket, TicketStatusHistory
 
 
-class TicketStatusHistoryInline(admin.TabularInline):
+class TicketStatusHistoryInline(TabularInline):
     model           = TicketStatusHistory
     extra           = 0
     readonly_fields = ["old_status", "new_status", "changed_by", "note", "created_at"]
 
 
 @admin.register(DeliveryTicket)
-class DeliveryTicketAdmin(admin.ModelAdmin):
+class DeliveryTicketAdmin(ModelAdmin):
     inlines         = [TicketStatusHistoryInline]
-    list_display    = ["id", "order", "agent", "status_badge",
-                       "delivery_city", "created_at"]
+    list_display    = ["id", "order", "agent", "status_badge", "delivery_city", "created_at"]
     list_filter     = ["status", "delivery_city"]
     search_fields   = ["order__id", "agent__phone"]
     readonly_fields = ["id", "claimed_at", "delivered_at", "created_at"]
@@ -40,13 +40,10 @@ class DeliveryTicketAdmin(admin.ModelAdmin):
     status_badge.short_description = "Statut"
 
     @admin.action(description="📦 Assigner")
-    def mark_assigned(self, request, qs):
-        qs.update(status="assigned")
+    def mark_assigned(self, request, qs): qs.update(status="assigned")
 
     @admin.action(description="🏃 Récupéré")
-    def mark_picked(self, request, qs):
-        qs.update(status="picked_up")
+    def mark_picked(self, request, qs): qs.update(status="picked_up")
 
     @admin.action(description="✅ Livré")
-    def mark_delivered(self, request, qs):
-        qs.update(status="delivered")
+    def mark_delivered(self, request, qs): qs.update(status="delivered")

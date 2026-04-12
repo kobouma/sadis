@@ -1,10 +1,11 @@
 # apps/products/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
+from unfold.admin import ModelAdmin, TabularInline
 from apps.products.models import Category, Product, ProductImage, ProductVariant
 
 
-class ProductImageInline(admin.TabularInline):
+class ProductImageInline(TabularInline):
     model           = ProductImage
     extra           = 0
     fields          = ["image_preview", "file", "media_type", "order", "is_cover"]
@@ -21,20 +22,20 @@ class ProductImageInline(admin.TabularInline):
     image_preview.short_description = "Aperçu"
 
 
-class ProductVariantInline(admin.TabularInline):
+class ProductVariantInline(TabularInline):
     model  = ProductVariant
     extra  = 0
     fields = ["label", "extra_price", "stock", "is_available"]
 
 
 @admin.register(Category)
-class CategoryAdmin(admin.ModelAdmin):
+class CategoryAdmin(ModelAdmin):
     list_display        = ["name", "slug", "icon", "parent"]
     prepopulated_fields = {"slug": ("name",)}
 
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(ModelAdmin):
     inlines         = [ProductImageInline, ProductVariantInline]
     list_display    = ["cover_preview", "name", "shop", "price_display",
                        "stock", "is_available", "views_count", "sales_count"]
@@ -46,9 +47,9 @@ class ProductAdmin(admin.ModelAdmin):
     actions         = ["make_available", "make_unavailable"]
 
     fieldsets = (
-        ("Informations",  {"fields": ("id", "slug", "name", "description", "shop", "category")}),
-        ("Prix & Stock",  {"fields": ("price", "old_price", "stock", "is_available")}),
-        ("Stats",         {"fields": ("views_count", "sales_count", "created_at")}),
+        ("Informations", {"fields": ("id", "slug", "name", "description", "shop", "category")}),
+        ("Prix & Stock", {"fields": ("price", "old_price", "stock", "is_available")}),
+        ("Stats",        {"fields": ("views_count", "sales_count", "created_at")}),
     )
 
     def cover_preview(self, obj):
@@ -69,9 +70,7 @@ class ProductAdmin(admin.ModelAdmin):
                 '<span style="color:#9E9E9E;text-decoration:line-through;font-size:11px">{}</span>',
                 f"{obj.price:,.0f}", f"{obj.old_price:,.0f}"
             )
-        return format_html(
-            '<span style="font-weight:600">{} XOF</span>', f"{obj.price:,.0f}"
-        )
+        return format_html('<span style="font-weight:600">{} XOF</span>', f"{obj.price:,.0f}")
     price_display.short_description = "Prix"
 
     @admin.action(description="✅ Rendre disponibles")
