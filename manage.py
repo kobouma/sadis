@@ -2,8 +2,9 @@ import os
 import sys
 
 def main():
-    # Lit DJANGO_SETTINGS_MODULE depuis l'env, fallback sur dev en local
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.dev")
+    # Priorité : variable d'env existante → sinon fallback dev
+    if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+        os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings.dev"
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
