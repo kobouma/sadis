@@ -1,31 +1,20 @@
 #!/usr/bin/env bash
 set -e
 
+export DJANGO_SETTINGS_MODULE=config.settings.prod
+
 echo "==> Installation des dépendances"
 pip install -r requirements/prod.txt
 
 echo "==> Collecte des fichiers statiques"
-python -c "
-import sys, os
-os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings.prod'
-from django.core.management import execute_from_command_line
-execute_from_command_line(['manage.py', 'collectstatic', '--no-input'])
-"
+python manage.py collectstatic --no-input
 
 echo "==> Migrations"
-python -c "
-import sys, os
-os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings.prod'
-from django.core.management import execute_from_command_line
-execute_from_command_line(['manage.py', 'migrate', '--no-input'])
-"
+python manage.py migrate --no-input
 
 echo "==> Création superuser"
-python -c "
+python manage.py shell -c "
 import os
-os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings.prod'
-import django
-django.setup()
 from apps.users.models import User
 phone    = os.environ.get('ADMIN_PHONE', '+22600000000')
 name     = os.environ.get('ADMIN_NAME', 'Admin SADIS')
