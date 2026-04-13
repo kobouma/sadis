@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin, StackedInline
-from .models import User, Profile
+from .models import User, Profile, DeliveryAgent
 
 
 class ProfileInline(StackedInline):
@@ -26,9 +26,9 @@ class ProfileInline(StackedInline):
 @admin.register(User)
 class UserAdmin(ModelAdmin, BaseUserAdmin):
     inlines         = [ProfileInline]
-    list_display    = ["phone", "full_name", "role_badge",
+    list_display    = ["phone", "full_name", "is_delivery",
                        "phone_verified", "is_active", "date_joined"]
-    list_filter     = ["role", "phone_verified", "is_active"]
+    list_filter     = ["is_delivery", "phone_verified", "is_active"]
     search_fields   = ["phone", "full_name"]
     ordering        = ["-date_joined"]
     readonly_fields = ["id", "date_joined"]
@@ -37,40 +37,27 @@ class UserAdmin(ModelAdmin, BaseUserAdmin):
 
     fieldsets = (
         (None,           {"fields": ("id", "phone", "password")}),
-        ("Informations", {"fields": ("full_name", "role", "phone_verified")}),
+        ("Informations", {"fields": ("full_name", "email", "phone_verified")}),
+        ("Livraison",    {"fields": ("is_delivery",)}),
         ("Permissions",  {"fields": ("is_active", "is_staff", "is_superuser")}),
         ("Dates",        {"fields": ("date_joined", "last_login")}),
     )
     add_fieldsets = (
         (None, {"classes": ("wide",),
-                "fields":  ("phone", "full_name", "role", "password1", "password2")}),
+                "fields":  ("phone", "full_name", "password1", "password2")}),
     )
 
-    def role_badge(self, obj):
-        colors = {
-            "buyer":    ("#E8F5E9", "#2E7D32"),
-            "seller":   ("#E3F2FD", "#1565C0"),
-            "delivery": ("#FFF3E0", "#E65100"),
-        }
-        bg, fg = colors.get(obj.role, ("#F5F5F5", "#616161"))
-        return format_html(
-            '<span style="background:{};color:{};padding:2px 8px;'
-            'border-radius:12px;font-size:11px;font-weight:600">{}</span>',
-            bg, fg, obj.get_role_display()
-        )
-    role_badge.short_description = "Rôle"
-
-    @admin.action(description="✅ Activer les comptes sélectionnés")
+    @admin.action(description="✅ Activer les comptes")
     def activate_users(self, request, queryset):
         count = queryset.update(is_active=True)
         self.message_user(request, f"{count} compte(s) activé(s).")
 
-    @admin.action(description="🚫 Désactiver les comptes sélectionnés")
+    @admin.action(description="🚫 Désactiver les comptes")
     def deactivate_users(self, request, queryset):
         count = queryset.update(is_active=False)
         self.message_user(request, f"{count} compte(s) désactivé(s).")
 
-    @admin.action(description="📱 Marquer téléphones comme vérifiés")
+    @admin.action(description="📱 Vérifier les téléphones")
     def verify_phones(self, request, queryset):
         count = queryset.update(phone_verified=True)
         self.message_user(request, f"{count} téléphone(s) vérifié(s).")
@@ -91,3 +78,25 @@ class ProfileAdmin(ModelAdmin):
             )
         return "—"
     avatar_preview.short_description = "Avatar"
+
+
+@admin.register(DeliveryAgent)
+class DeliveryAgentAdmin(ModelAdmin):
+    list_display  = ["user", "city", "vehicle_type", "status",
+                     "rating", "total_deliveries", "is_online"]
+    list_filter   = ["status", "vehicle_type", "city"]
+    search_fields = ["user__phone", "user__full_name", "city"]
+    list_editable = ["status", "is_online"]
+    readonly_fields = ["created_at", "updated_at"]
+    actions       = ["activate_agents", "deactivate_agents"]
+
+    @admin.action(description="✅ Activer les livreurs")
+    def activate_agents(self, request, queryset):
+        for agent in queryset:
+            agent.activate()
+        self.message_user(request, f"{queryset.count()} livreur(s) activé(s).")
+
+    @admin.action(description="🚫 Désactiver les livreurs")
+    def deactivate_agents(self, request, queryset):
+        queryset.update(status="inactive")
+        queryset.update(user__is_delivery=False)

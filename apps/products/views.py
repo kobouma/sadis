@@ -14,7 +14,7 @@ from apps.products.serializers import (
 from core.utils.mixins import ApiResponseMixin
 from core.utils.response import success, created, error
 from core.permissions.permissions import IsShopOwner
-from apps.users.permissions import IsSeller
+from apps.users.permissions import HasShop as IsSeller
 
 
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,65 +1,83 @@
-from django.utils import timezone
-from rest_framework import viewsets, status
+# apps/delivery/views.py
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from apps.delivery.models import DeliveryTicket
 from apps.delivery.serializers import DeliveryTicketSerializer
-from core.utils.response import success, error
 from apps.users.permissions import IsDeliveryAgent
+from core.utils.response import success, error
 
-VALID_TRANSITIONS = {
-    "claimed":    ["available"],
-    "picked_up":  ["claimed"],
-    "delivering": ["picked_up"],
-    "delivered":  ["delivering"],
-    "failed":     ["claimed", "picked_up", "delivering"],
-}
 
 class DeliveryTicketViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Endpoints livreur :
+    GET  /delivery/tickets/          → tickets disponibles dans ma zone
+    GET  /delivery/tickets/<id>/     → détail ticket
+    POST /delivery/tickets/<id>/claim/    → prendre en charge
+    POST /delivery/tickets/<id>/pickup/  → colis récupéré
+    POST /delivery/tickets/<id>/deliver/ → livré
+    """
     serializer_class   = DeliveryTicketSerializer
     permission_classes = [IsAuthenticated, IsDeliveryAgent]
 
     def get_queryset(self):
-        return DeliveryTicket.objects.select_related("order","agent").prefetch_related("history")
+        user = self.request.user
+        # Tickets disponibles OU assignés à ce livreur
+        return DeliveryTicket.objects.filter(
+            status__in=["pending", "assigned", "picked_up", "en_route"]
+        ).select_related("order__buyer", "order__shop", "agent")
 
     def list(self, request, *args, **kwargs):
-        city = getattr(request.user.profile, "city", "")
-        qs = self.get_queryset().filter(status=DeliveryTicket.Status.AVAILABLE,
-                                        delivery_city__icontains=city)
+        # Filtrer par type de livraison si demandé
+        qs = self.get_queryset()
+        dtype = request.query_params.get("type")
+        if dtype in ["standard", "express"]:
+            qs = qs.filter(delivery_type=dtype)
+        # Priorité : tickets non assignés d'abord
+        qs = qs.order_by("status", "-created_at")
         return success(data=self.get_serializer(qs, many=True).data)
 
-    @action(detail=False, methods=["get"])
-    def mine(self, request):
-        qs = self.get_queryset().filter(agent=request.user).exclude(
-            status__in=[DeliveryTicket.Status.DELIVERED, DeliveryTicket.Status.FAILED])
-        return success(data=self.get_serializer(qs, many=True).data)
+    def retrieve(self, request, *args, **kwargs):
+        return success(data=self.get_serializer(self.get_object()).data)
 
     @action(detail=True, methods=["post"])
     def claim(self, request, pk=None):
+        """Le livreur prend en charge le ticket."""
         ticket = self.get_object()
-        if ticket.status != DeliveryTicket.Status.AVAILABLE:
-            return error("Ce ticket n'est plus disponible.")
-        old = ticket.status
-        ticket.agent, ticket.status, ticket.claimed_at = request.user, DeliveryTicket.Status.CLAIMED, timezone.now()
-        ticket.save()
-        TicketStatusHistory.objects.create(ticket=ticket, old_status=old,
-                                           new_status=ticket.status, changed_by=request.user)
-        return success(data=self.get_serializer(ticket).data, message="Ticket pris en charge.")
+        if ticket.status != "pending":
+            return error("Ce ticket est déjà pris en charge.")
+        if ticket.agent is not None:
+            return error("Ce ticket a déjà un livreur.")
 
-    @action(detail=True, methods=["post"], url_path="status")
-    def update_status(self, request, pk=None):
-        ticket     = self.get_object()
-        new_status = request.data.get("status")
-        note       = request.data.get("note", "")
+        from apps.orders.shipping_service import assign_agent
+        assign_agent(ticket, request.user)
+        return success(
+            data    = self.get_serializer(ticket).data,
+            message = "Ticket pris en charge ✅"
+        )
+
+    @action(detail=True, methods=["post"])
+    def pickup(self, request, pk=None):
+        """Le livreur confirme avoir récupéré le colis."""
+        ticket = self.get_object()
         if ticket.agent != request.user:
-            return error("Ce ticket ne vous est pas assigné.", status_code=status.HTTP_403_FORBIDDEN)
-        if ticket.status not in VALID_TRANSITIONS.get(new_status, []):
-            return error(f"Transition {ticket.status} → {new_status} non autorisée.")
-        old = ticket.status
-        ticket.status = new_status
-        if new_status == DeliveryTicket.Status.DELIVERED:
-            ticket.delivered_at = timezone.now()
-        ticket.save()
-        TicketStatusHistory.objects.create(ticket=ticket, old_status=old,
-                                           new_status=new_status, changed_by=request.user, note=note)
-        return success(data=self.get_serializer(ticket).data, message="Statut mis à jour.")
+            return error("Vous n'êtes pas le livreur de ce ticket.", status_code=403)
+        if ticket.status != "assigned":
+            return error("Le colis n'est pas encore assigné.")
+
+        from apps.orders.shipping_service import mark_picked_up
+        mark_picked_up(ticket, request.user)
+        return success(message="Colis récupéré ✅")
+
+    @action(detail=True, methods=["post"])
+    def deliver(self, request, pk=None):
+        """Le livreur confirme la livraison."""
+        ticket = self.get_object()
+        if ticket.agent != request.user:
+            return error("Vous n'êtes pas le livreur de ce ticket.", status_code=403)
+        if ticket.status != "picked_up":
+            return error("Le colis n'a pas encore été récupéré.")
+
+        from apps.orders.shipping_service import mark_delivered
+        mark_delivered(ticket, request.user)
+        return success(message="Livraison confirmée ✅")

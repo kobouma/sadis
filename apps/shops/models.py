@@ -28,7 +28,7 @@ class Shop(models.Model):
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner       = models.ForeignKey(User, on_delete=models.CASCADE,
                                     related_name="shops",
-                                    limit_choices_to={"role": "seller"})
+                                    )
     category    = models.ForeignKey(ShopCategory, on_delete=models.SET_NULL,
                                     null=True, blank=True, related_name="shops")
     name        = models.CharField(max_length=200)

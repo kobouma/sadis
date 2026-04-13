@@ -96,7 +96,6 @@ USE_I18N      = True
 USE_TZ        = True
 STATIC_URL    = "/static/"
 STATIC_ROOT   = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL     = "/media/"
 MEDIA_ROOT    = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -122,6 +121,8 @@ cloudinary.config(
 
 # Remplace le stockage local pour tous les médias
 DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
+
+# Ajouter dans config/settings/base.py
 
 from django.templatetags.static import static
 from django.urls import reverse_lazy
@@ -191,7 +192,7 @@ UNFOLD = {
                         "title": "Utilisateurs",
                         "icon":  "people",
                         "link":  reverse_lazy("admin:users_user_changelist"),
-                        "badge": "apps.users.badge.user_count",
+                        "badge": "apps.users.admin.user_count",
                     },
                     {
                         "title": "Profils",
@@ -235,11 +236,7 @@ UNFOLD = {
                         "icon":  "receipt_long",
                         "link":  reverse_lazy("admin:orders_order_changelist"),
                     },
-                    {
-                        "title": "Paniers",
-                        "icon":  "shopping_cart",
-                        "link":  reverse_lazy("admin:orders_cart_changelist"),
-                    },
+
                 ],
             },
             {
