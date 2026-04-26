@@ -1,42 +1,85 @@
-from rest_framework import viewsets
-from rest_framework.decorators import action
+# apps/chat/views.py
+# Fix : accepter product_id seul pour trouver le seller automatiquement
+
+from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
-from apps.chat.models import Conversation, Message
-from apps.chat.serializers import ConversationCreateSerializer, ConversationSerializer
-from core.utils.response import success, created
+from rest_framework.response import Response
+from .models import Conversation, Message
+from .serializers import ConversationSerializer, MessageSerializer
+from apps.products.models import Product
+
 
 class ConversationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    http_method_names  = ["get", "post", "head", "options"]
+    serializer_class   = ConversationSerializer
 
     def get_queryset(self):
         user = self.request.user
-        return (Conversation.objects.filter(buyer=user) |
-                Conversation.objects.filter(seller=user)).distinct()\
-               .select_related("buyer","seller","product").prefetch_related("messages")
-
-    def get_serializer_class(self):
-        return ConversationCreateSerializer if self.action == "create" else ConversationSerializer
-
-    def list(self, request, *args, **kwargs):
-        qs = self.get_queryset().order_by("-updated_at")
-        return success(data=self.get_serializer(qs, many=True, context={"request": request}).data)
+        return Conversation.objects.filter(
+            models.Q(buyer=user) | models.Q(seller=user)
+        ).select_related('buyer', 'seller', 'product').order_by('-updated_at')
 
     def create(self, request, *args, **kwargs):
-        s = ConversationCreateSerializer(data=request.data, context={"request": request})
-        s.is_valid(raise_exception=True)
-        return created(data=ConversationSerializer(s.save(), context={"request": request}).data,
-                       message="Conversation ouverte.")
+        buyer      = request.user
+        product_id = request.data.get('product_id')
+        seller_id  = request.data.get('seller')
+        shop_slug  = request.data.get('shop_slug')
 
-    def retrieve(self, request, *args, **kwargs):
-        conv = self.get_object()
-        return success(data={
-            "conversation": ConversationSerializer(conv, context={"request": request}).data,
-            "messages":     MessageSerializer(conv.messages.order_by("created_at"), many=True).data,
-        })
+        # Résoudre le seller depuis le produit si non fourni
+        if not seller_id and product_id:
+            try:
+                product   = Product.objects.select_related('shop__owner').get(pk=product_id)
+                seller_id = str(product.shop.owner.id)
+            except Product.DoesNotExist:
+                pass
 
-    @action(detail=True, methods=["post"])
-    def read(self, request, pk=None):
-        updated = Message.objects.filter(conversation=self.get_object(), is_read=False)\
-                         .exclude(sender=request.user).update(is_read=True)
-        return success(message=f"{updated} message(s) lu(s).")
+        # Résoudre depuis le shop_slug si toujours pas trouvé
+        if not seller_id and shop_slug:
+            from apps.shops.models import Shop
+            try:
+                shop      = Shop.objects.select_related('owner').get(slug=shop_slug)
+                seller_id = str(shop.owner.id)
+            except Shop.DoesNotExist:
+                pass
+
+        if not seller_id:
+            return Response(
+                {'error': 'Vendeur introuvable.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        try:
+            seller = User.objects.get(pk=seller_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Vendeur introuvable.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if seller == buyer:
+            return Response(
+                {'error': 'Vous ne pouvez pas discuter avec vous-même.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Récupérer ou créer la conversation
+        product = None
+        if product_id:
+            try:
+                product = Product.objects.get(pk=product_id)
+            except Product.DoesNotExist:
+                pass
+
+        conv, created = Conversation.objects.get_or_create(
+            buyer   = buyer,
+            seller  = seller,
+            product = product,
+        )
+
+        return Response(
+            ConversationSerializer(conv).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        )
