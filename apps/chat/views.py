@@ -19,13 +19,19 @@ class ConversationViewSet(viewsets.ModelViewSet):
             django_models.Q(buyer=user) | django_models.Q(seller=user)
         ).select_related('buyer', 'seller', 'product').order_by('-updated_at')
 
+    def get_serializer_context(self):
+        # ← Fix : toujours passer request dans le contexte
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
     def create(self, request, *args, **kwargs):
         buyer      = request.user
         product_id = request.data.get('product_id')
         seller_id  = request.data.get('seller')
         shop_slug  = request.data.get('shop_slug')
 
-        # Résoudre le seller depuis le produit si non fourni
+        # Résoudre le seller depuis le produit
         if not seller_id and product_id:
             try:
                 product   = Product.objects.select_related('shop__owner').get(pk=product_id)
@@ -33,7 +39,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             except Product.DoesNotExist:
                 pass
 
-        # Résoudre depuis le shop_slug si toujours pas trouvé
+        # Résoudre depuis le shop_slug
         if not seller_id and shop_slug:
             from apps.shops.models import Shop
             try:
@@ -44,7 +50,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
         if not seller_id:
             return Response(
-                {'error': 'Vendeur introuvable.'},
+                {'success': False, 'error': 'Vendeur introuvable.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -55,17 +61,17 @@ class ConversationViewSet(viewsets.ModelViewSet):
             seller = User.objects.get(pk=seller_id)
         except User.DoesNotExist:
             return Response(
-                {'error': 'Vendeur introuvable.'},
+                {'success': False, 'error': 'Vendeur introuvable.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
         if seller == buyer:
             return Response(
-                {'error': 'Vous ne pouvez pas discuter avec vous-même.'},
+                {'success': False, 'error': 'Vous ne pouvez pas discuter avec vous-même.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Récupérer ou créer la conversation
+        # Produit
         product_obj = None
         if product_id:
             try:
@@ -79,8 +85,14 @@ class ConversationViewSet(viewsets.ModelViewSet):
             product = product_obj,
         )
 
+        # ← Fix : passer request dans le contexte du serializer
+        serializer = ConversationSerializer(
+            conv,
+            context={'request': request}
+        )
+
         return Response(
-            {'success': True, 'data': ConversationSerializer(conv).data},
+            {'success': True, 'data': serializer.data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
         )
 
