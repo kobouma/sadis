@@ -13,8 +13,8 @@ SECRET_KEY = env("SECRET_KEY")
 DATABASES = {
     "default": dj_database_url.config(
         default=env("DATABASE_URL"),
-        conn_max_age=600,
-        conn_health_checks=True,
+        conn_max_age=0,        # 0 = pas de persistance — requis pour Supabase pool
+        conn_health_checks=False,
         ssl_require=True,
     )
 }
