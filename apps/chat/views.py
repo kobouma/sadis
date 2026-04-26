@@ -1,6 +1,6 @@
 # apps/chat/views.py
-# Fix : accepter product_id seul pour trouver le seller automatiquement
 
+from django.db import models as django_models
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -16,7 +16,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         return Conversation.objects.filter(
-            models.Q(buyer=user) | models.Q(seller=user)
+            django_models.Q(buyer=user) | django_models.Q(seller=user)
         ).select_related('buyer', 'seller', 'product').order_by('-updated_at')
 
     def create(self, request, *args, **kwargs):
@@ -66,20 +66,31 @@ class ConversationViewSet(viewsets.ModelViewSet):
             )
 
         # Récupérer ou créer la conversation
-        product = None
+        product_obj = None
         if product_id:
             try:
-                product = Product.objects.get(pk=product_id)
+                product_obj = Product.objects.get(pk=product_id)
             except Product.DoesNotExist:
                 pass
 
         conv, created = Conversation.objects.get_or_create(
             buyer   = buyer,
             seller  = seller,
-            product = product,
+            product = product_obj,
         )
 
         return Response(
-            ConversationSerializer(conv).data,
+            {'success': True, 'data': ConversationSerializer(conv).data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
         )
+
+
+class MessageViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class   = MessageSerializer
+
+    def get_queryset(self):
+        conv_id = self.kwargs.get('conversation_pk')
+        return Message.objects.filter(
+            conversation_id=conv_id
+        ).select_related('sender').order_by('created_at')
