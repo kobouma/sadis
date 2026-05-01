@@ -1,10 +1,10 @@
+# apps/shops/views.py
 from rest_framework import viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, AllowAny
 from core.utils.mixins import ApiResponseMixin
 from core.utils.response import success, error
 from core.permissions.permissions import IsShopOwner
-from apps.users.permissions import IsSeller
 from .models import Shop, ShopCategory
 from .serializers import ShopSerializer, ShopCreateUpdateSerializer, ShopCategorySerializer
 
@@ -30,8 +30,6 @@ class ShopViewSet(ApiResponseMixin, viewsets.ModelViewSet):
         return ShopSerializer
 
     def get_permissions(self):
-        if self.action == "create":
-            return [IsAuthenticated(), IsSeller()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsShopOwner()]
         return [IsAuthenticatedOrReadOnly()]
@@ -39,8 +37,13 @@ class ShopViewSet(ApiResponseMixin, viewsets.ModelViewSet):
     # ── GET  /shops/mine/ → boutique du vendeur ───────────────
     # ── POST /shops/mine/ → créer une boutique ────────────────
     # ── PATCH/shops/mine/ → modifier la boutique ─────────────
-    @action(detail=False, methods=["get", "post", "patch"],
-            permission_classes=[IsAuthenticated, IsSeller])
+    @action(
+        detail=False,
+        methods=["get", "post", "patch"],
+        # ← Fix : IsAuthenticated uniquement — pas IsSeller
+        # Tout utilisateur connecté peut créer sa boutique
+        permission_classes=[IsAuthenticated],
+    )
     def mine(self, request):
 
         if request.method == "GET":
@@ -49,14 +52,21 @@ class ShopViewSet(ApiResponseMixin, viewsets.ModelViewSet):
 
         if request.method == "POST":
             if Shop.objects.filter(owner=request.user).exists():
-                return error(message="Vous avez déjà une boutique.", status_code=400)
+                # Boutique déjà existante → retourner la boutique existante
+                shop = Shop.objects.filter(owner=request.user).first()
+                return success(data=ShopSerializer(shop).data)
+
             serializer = ShopCreateUpdateSerializer(
                 data=request.data, context={"request": request}
             )
             if serializer.is_valid():
                 shop = serializer.save(owner=request.user)
                 return success(data=ShopSerializer(shop).data, status_code=201)
-            return error(message="Données invalides.", details=serializer.errors, status_code=400)
+            return error(
+                message="Données invalides.",
+                details=serializer.errors,
+                status_code=400,
+            )
 
         if request.method == "PATCH":
             shop = Shop.objects.filter(owner=request.user).first()
@@ -68,4 +78,8 @@ class ShopViewSet(ApiResponseMixin, viewsets.ModelViewSet):
             if serializer.is_valid():
                 shop = serializer.save()
                 return success(data=ShopSerializer(shop).data)
-            return error(message="Données invalides.", details=serializer.errors, status_code=400)
+            return error(
+                message="Données invalides.",
+                details=serializer.errors,
+                status_code=400,
+            )
