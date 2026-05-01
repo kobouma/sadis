@@ -45,7 +45,7 @@ class ProductViewSet(ApiResponseMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action == "create":
-            return [IsAuthenticated(), IsSeller()]
+            return [IsAuthenticated()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [IsAuthenticated(), IsShopOwner()]
         return [IsAuthenticatedOrReadOnly()]
