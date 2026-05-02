@@ -20,7 +20,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
         ).select_related('buyer', 'seller', 'product').order_by('-updated_at')
 
     def get_serializer_context(self):
-        # ← Fix : toujours passer request dans le contexte
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
@@ -31,7 +30,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
         seller_id  = request.data.get('seller')
         shop_slug  = request.data.get('shop_slug')
 
-        # Résoudre le seller depuis le produit
         if not seller_id and product_id:
             try:
                 product   = Product.objects.select_related('shop__owner').get(pk=product_id)
@@ -39,7 +37,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
             except Product.DoesNotExist:
                 pass
 
-        # Résoudre depuis le shop_slug
         if not seller_id and shop_slug:
             from apps.shops.models import Shop
             try:
@@ -71,7 +68,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Produit
         product_obj = None
         if product_id:
             try:
@@ -85,12 +81,9 @@ class ConversationViewSet(viewsets.ModelViewSet):
             product = product_obj,
         )
 
-        # ← Fix : passer request dans le contexte du serializer
         serializer = ConversationSerializer(
-            conv,
-            context={'request': request}
+            conv, context={'request': request}
         )
-
         return Response(
             {'success': True, 'data': serializer.data},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
@@ -103,6 +96,49 @@ class MessageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         conv_id = self.kwargs.get('conversation_pk')
+        user    = self.request.user
+        # Vérifier que l'utilisateur fait partie de la conversation
         return Message.objects.filter(
-            conversation_id=conv_id
+            conversation_id=conv_id,
+            conversation__in=Conversation.objects.filter(
+                django_models.Q(buyer=user) | django_models.Q(seller=user)
+            )
         ).select_related('sender').order_by('created_at')
+
+    def create(self, request, *args, **kwargs):
+        conv_id = self.kwargs.get('conversation_pk')
+        user    = self.request.user
+
+        # Vérifier accès à la conversation
+        try:
+            conv = Conversation.objects.get(
+                django_models.Q(buyer=user) | django_models.Q(seller=user),
+                pk=conv_id,
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {'success': False, 'error': 'Conversation introuvable.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        msg_type = request.data.get('msg_type', 'text')
+        payload  = request.data.get('payload', {})
+
+        # Accepter aussi content direct pour compatibilité
+        if not payload and request.data.get('content'):
+            payload = {'content': request.data.get('content')}
+
+        msg = Message.objects.create(
+            conversation = conv,
+            sender       = user,
+            msg_type     = msg_type,
+            payload      = payload,
+        )
+
+        # Mettre à jour updated_at de la conversation
+        conv.save(update_fields=['updated_at'])
+
+        return Response(
+            {'success': True, 'data': MessageSerializer(msg).data},
+            status=status.HTTP_201_CREATED
+        )
