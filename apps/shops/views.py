@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from core.utils.mixins import ApiResponseMixin
 from core.utils.response import success, error
 from core.permissions.permissions import IsShopOwner
-from .models import Shop, ShopCategory
+from .models import Shop, ShopCategory, ShopFollow
 from .serializers import ShopSerializer, ShopCreateUpdateSerializer, ShopCategorySerializer
 
 
@@ -83,3 +83,24 @@ class ShopViewSet(ApiResponseMixin, viewsets.ModelViewSet):
                 details=serializer.errors,
                 status_code=400,
             )
+
+    # ── POST /shops/{slug}/follow/ → toggle abonnement ───────
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="follow",
+        permission_classes=[IsAuthenticated],
+    )
+    def follow(self, request, slug=None):
+        shop = self.get_object()
+        follow_obj, is_new = ShopFollow.objects.get_or_create(
+            user=request.user, shop=shop)
+        total = ShopFollow.objects.filter(shop=shop).count()
+        if not is_new:
+            follow_obj.delete()
+            return success(
+                data={"following": False, "followers_count": max(0, total - 1)},
+                message="Boutique désabonnée.")
+        return success(
+            data={"following": True, "followers_count": total},
+            message="Boutique suivie.")

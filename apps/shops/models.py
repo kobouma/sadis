@@ -68,3 +68,21 @@ class Shop(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.owner.full_name})"
+
+
+class ShopFollow(models.Model):
+    """Un utilisateur suit une boutique."""
+    user       = models.ForeignKey(User, on_delete=models.CASCADE,
+                                   related_name="shop_follows")
+    shop       = models.ForeignKey(Shop, on_delete=models.CASCADE,
+                                   related_name="followers")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together     = [["user", "shop"]]
+        ordering            = ["-created_at"]
+        verbose_name        = "Abonnement boutique"
+        verbose_name_plural = "Abonnements boutiques"
+
+    def __str__(self):
+        return f"{self.user.full_name} → {self.shop.name}"

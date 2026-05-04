@@ -9,17 +9,19 @@ class ShopCategorySerializer(serializers.ModelSerializer):
 
 
 class ShopSerializer(serializers.ModelSerializer):
-    owner_name = serializers.CharField(source="owner.full_name", read_only=True)
-    category   = ShopCategorySerializer(read_only=True)
-    # URLs CDN Cloudinary pour logo et banner
-    logo   = serializers.SerializerMethodField()
-    banner = serializers.SerializerMethodField()
+    owner_name      = serializers.CharField(source="owner.full_name", read_only=True)
+    category        = ShopCategorySerializer(read_only=True)
+    logo            = serializers.SerializerMethodField()
+    banner          = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    is_following    = serializers.SerializerMethodField()
 
     class Meta:
         model  = Shop
         fields = ["id", "name", "slug", "description", "logo", "banner",
                   "phone", "city", "address", "latitude", "longitude",
-                  "is_active", "is_verified", "owner_name", "category", "created_at"]
+                  "is_active", "is_verified", "owner_name", "category",
+                  "followers_count", "is_following", "created_at"]
         read_only_fields = ["id", "slug", "is_verified", "created_at", "owner_name"]
 
     def get_logo(self, obj):
@@ -27,6 +29,15 @@ class ShopSerializer(serializers.ModelSerializer):
 
     def get_banner(self, obj):
         return obj.banner.url if obj.banner else None
+
+    def get_followers_count(self, obj):
+        return obj.followers.count()
+
+    def get_is_following(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.followers.filter(user=request.user).exists()
+        return False
 
 
 class ShopCreateUpdateSerializer(serializers.ModelSerializer):
