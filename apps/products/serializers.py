@@ -53,7 +53,13 @@ class ProductSerializer(serializers.ModelSerializer):
     shop_slug        = serializers.CharField(source="shop.slug",     read_only=True)
     shop_owner_id    = serializers.CharField(source="shop.owner.id", read_only=True)
     shop_logo        = serializers.SerializerMethodField()
+    shop             = serializers.SerializerMethodField()
     discount_percent = serializers.IntegerField(read_only=True)
+    reviews          = serializers.SerializerMethodField()
+    review_count     = serializers.SerializerMethodField()
+    rating           = serializers.SerializerMethodField()
+    is_liked         = serializers.SerializerMethodField()
+    likes_count      = serializers.SerializerMethodField()
 
     class Meta:
         model  = Product
@@ -61,10 +67,53 @@ class ProductSerializer(serializers.ModelSerializer):
                   "price", "old_price", "discount_percent",
                   "stock", "is_available", "views_count", "sales_count",
                   "shop_name", "shop_slug", "shop_owner_id", "shop_logo",
-                  "category", "images", "variants", "created_at"]
+                  "shop", "category", "images", "variants",
+                  "reviews", "review_count", "rating",
+                  "is_liked", "likes_count",
+                  "created_at"]
 
     def get_shop_logo(self, obj):
         return obj.shop.logo.url if obj.shop.logo else None
+
+    def get_shop(self, obj):
+        request = self.context.get("request")
+        is_following = False
+        if request and request.user.is_authenticated:
+            from apps.shops.models import ShopFollow
+            is_following = ShopFollow.objects.filter(
+                user=request.user, shop=obj.shop).exists()
+        return {
+            "id":           str(obj.shop.id),
+            "name":         obj.shop.name,
+            "slug":         obj.shop.slug,
+            "logo":         obj.shop.logo.url if obj.shop.logo else None,
+            "city":         obj.shop.city,
+            "is_verified":  obj.shop.is_verified,
+            "owner_id":     str(obj.shop.owner_id),
+            "is_following": is_following,
+        }
+
+    def get_reviews(self, obj):
+        from apps.reviews.serializers import ReviewSerializer
+        qs = obj.reviews.select_related("user").prefetch_related("images")[:20]
+        return ReviewSerializer(qs, many=True, context=self.context).data
+
+    def get_review_count(self, obj):
+        return obj.reviews.count()
+
+    def get_rating(self, obj):
+        from django.db.models import Avg
+        avg = obj.reviews.aggregate(avg=Avg("rating"))["avg"]
+        return round(float(avg), 1) if avg else 0.0
+
+    def get_is_liked(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user).exists()
+        return False
+
+    def get_likes_count(self, obj):
+        return obj.likes.count()
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):

@@ -33,8 +33,8 @@ class ProductViewSet(ApiResponseMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         return (Product.objects.filter(is_available=True)
-                .select_related("shop", "category")
-                .prefetch_related("images", "variants"))
+                .select_related("shop", "shop__owner", "category")
+                .prefetch_related("images", "variants", "reviews__user", "likes"))
 
     def get_serializer_class(self):
         if self.action == "list":
