@@ -159,3 +159,23 @@ class ProductViewSet(ApiResponseMixin, viewsets.ModelViewSet):
 
         img.delete()
         return success(message="Média supprimé.")
+
+    # ── GET /products/liked/ → produits likés par l'utilisateur ──
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="liked",
+        permission_classes=[IsAuthenticated],
+    )
+    def liked(self, request):
+        from apps.reviews.models import Like
+        liked_ids = Like.objects.filter(
+            user=request.user
+        ).values_list("product_id", flat=True)
+        qs = Product.objects.filter(
+            id__in=liked_ids, is_active=True
+        ).select_related("shop", "shop__category")
+        serializer = ProductListSerializer(
+            qs, many=True, context={"request": request}
+        )
+        return success(data=serializer.data)
