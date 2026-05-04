@@ -67,7 +67,7 @@ class ProductViewSet(ApiResponseMixin, viewsets.ModelViewSet):
             raise ValidationError("Boutique introuvable ou vous n'en êtes pas propriétaire.")
         serializer.save(shop=shop)
 
-    @action(detail=False, methods=["get"], permission_classes=[AllowAny])
+    @action(detail=False, methods=["get"], permission_classes=[AllowAny], url_path="flash-sale")
     def flash_sale(self, request):
         qs = self.get_queryset().filter(old_price__isnull=False)
         return success(data=ProductListSerializer(qs, many=True, context={"request": request}).data)
@@ -173,7 +173,7 @@ class ProductViewSet(ApiResponseMixin, viewsets.ModelViewSet):
             user=request.user
         ).values_list("product_id", flat=True)
         qs = Product.objects.filter(
-            id__in=liked_ids, is_active=True
+            id__in=liked_ids, is_available=True
         ).select_related("shop", "shop__category")
         serializer = ProductListSerializer(
             qs, many=True, context={"request": request}
