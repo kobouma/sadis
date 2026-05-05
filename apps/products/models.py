@@ -109,8 +109,13 @@ class ProductImage(models.Model):
     # ── URLs pratiques utilisées dans les serializers ─────────
     @property
     def url(self):
-        """URL CDN Cloudinary brute."""
-        return self.file.url if self.file else None
+        """URL CDN Cloudinary — même mécanisme que card_url pour garantir une URL valide."""
+        if not self.file:
+            return None
+        import cloudinary
+        return cloudinary.CloudinaryImage(str(self.file)).build_url(
+            quality="auto:good", fetch_format="auto",
+        )
 
     @property
     def thumbnail_url(self):

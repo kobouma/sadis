@@ -84,6 +84,24 @@ class ShopViewSet(ApiResponseMixin, viewsets.ModelViewSet):
                 status_code=400,
             )
 
+    # ── GET /shops/followed/ → boutiques suivies par l'utilisateur ──
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="followed",
+        permission_classes=[IsAuthenticated],
+    )
+    def followed(self, request):
+        shop_ids = ShopFollow.objects.filter(
+            user=request.user
+        ).values_list("shop_id", flat=True)
+        shops = Shop.objects.filter(
+            id__in=shop_ids, is_active=True
+        ).select_related("owner", "category")
+        return success(
+            data=ShopSerializer(shops, many=True, context={"request": request}).data
+        )
+
     # ── POST /shops/{slug}/follow/ → toggle abonnement ───────
     @action(
         detail=True,
